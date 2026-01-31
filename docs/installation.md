@@ -10,7 +10,7 @@
 The recommended way to install the OpenCDP PHP SDK is through Composer:
 
 ```bash
-composer require codematic/opencdp-php
+composer require code-matic/opencdp-php
 ```
 
 This will automatically install the required dependencies:

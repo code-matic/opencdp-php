@@ -7,7 +7,7 @@ See the [CDP Documentation](https://docs.opencdp.io/) for more information.
 ## Installation
 
 ```bash
-composer require codematic/opencdp-php
+composer require code-matic/opencdp-php
 ```
 
 ## Requirements

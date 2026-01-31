@@ -1,5 +1,5 @@
 {
-  "name": "codematic/opencdp-php",
+  "name": "code-matic/opencdp-php",
   "description": "PHP SDK for Codematic's Customer Data Platform (CDP) with optional Customer.io integration",
   "type": "library",
   "keywords": [
