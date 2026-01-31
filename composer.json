@@ -1,0 +1,59 @@
+{
+  "name": "codematic/opencdp-php",
+  "description": "PHP SDK for Codematic's Customer Data Platform (CDP) with optional Customer.io integration",
+  "type": "library",
+  "keywords": [
+    "cdp",
+    "customer data platform",
+    "codematic",
+    "analytics",
+    "email",
+    "sms",
+    "push notifications"
+  ],
+  "homepage": "https://docs.opencdp.io/",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Codematic",
+      "email": "support@codematic.io"
+    }
+  ],
+  "require": {
+    "php": "^8.0",
+    "guzzlehttp/guzzle": "^7.0"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.5 || ^10.0",
+    "phpstan/phpstan": "^1.10",
+    "squizlabs/php_codesniffer": "^3.7"
+  },
+  "suggest": {
+    "customerio/customerio-php": "Required for dual-write functionality to Customer.io"
+  },
+  "autoload": {
+    "psr-4": {
+      "Codematic\\OpenCDP\\": "src/"
+    },
+    "classmap": [
+      "src/Types.php"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Codematic\\OpenCDP\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test:coverage": "phpunit --coverage-html coverage",
+    "phpcs": "phpcs --standard=PSR12 src tests",
+    "phpstan": "phpstan analyse src tests --level=8"
+  },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
