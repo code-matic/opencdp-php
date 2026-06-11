@@ -14,11 +14,23 @@ class CDPConfigTest extends TestCase
   {
     $config = new CDPConfig(cdpApiKey: 'test-api-key');
     $this->assertEquals('test-api-key', $config->cdpApiKey);
-    $this->assertEquals('https://api.opencdp.io/gateway/data-gateway/', $config->cdpEndpoint);
+    $this->assertEquals('https://api.opencdp.com/gateway/data-gateway', $config->cdpEndpoint);
     $this->assertEquals(10000, $config->timeout);
     $this->assertFalse($config->debug);
     $this->assertFalse($config->failOnException);
     $this->assertInstanceOf(DefaultLogger::class, $config->logger);
+  }
+
+
+  public function testCDPConfigWithFallbackEndpointsAndConcurrency(): void
+  {
+    $config = new CDPConfig(
+      cdpApiKey: 'test-api-key',
+      cdpFallbackEndpoints: ['https://fallback.example.com'],
+      maxConcurrentRequests: 15
+    );
+    $this->assertEquals(['https://fallback.example.com'], $config->cdpFallbackEndpoints);
+    $this->assertEquals(15, $config->maxConcurrentRequests);
   }
 
   public function testCDPConfigThrowsOnEmptyApiKey(): void
