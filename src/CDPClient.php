@@ -56,18 +56,19 @@ class CDPClient
   private function requestWithFailover(string $method, string $path, array $options = []): \Psr\Http\Message\ResponseInterface
   {
     $lastException = null;
+    $normalizedPath = ltrim($path, '/');
     foreach ($this->baseUrls as $baseUrl) {
       try {
-        $client = new Client([
-          'base_uri' => $baseUrl . '/',
+        $url = rtrim($baseUrl, '/') . '/' . $normalizedPath;
+        $requestOptions = array_merge([
           'timeout' => $this->config->timeout / 1000,
           'headers' => [
             'Authorization' => $this->config->cdpApiKey,
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
           ],
-        ]);
-        $response = $client->request($method, ltrim($path, '/'), $options);
+        ], $options);
+        $response = $this->httpClient->request($method, $url, $requestOptions);
         if ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300) {
           return $response;
         }

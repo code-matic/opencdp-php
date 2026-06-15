@@ -10,8 +10,14 @@ use Codematic\OpenCDP\CDPClient;
 use Codematic\OpenCDP\CDPConfig;
 
 // Create configuration
+$apiKey = getenv('CDP_API_KEY') ?: 'your-cdp-api-key';
+if ($apiKey === 'your-cdp-api-key') {
+  fwrite(STDERR, "ERROR: Set CDP_API_KEY or replace the placeholder key in this script.\n");
+  exit(1);
+}
+
 $config = new CDPConfig(
-  cdpApiKey: 'your-cdp-api-key',
+  cdpApiKey: $apiKey,
   debug: true // Enable debug logging
 );
 
@@ -25,7 +31,8 @@ echo "Connection successful!\n\n";
 
 // Identify a user
 echo "Identifying user...\n";
-$client->identify('user123', [
+$userId = getenv('CDP_SMOKE_USER_ID') ?: 'flutter_dev_test_001';
+$client->identify($userId, [
   'email' => 'john.doe@example.com',
   'name' => 'John Doe',
   'plan' => 'premium',
@@ -35,7 +42,7 @@ echo "User identified!\n\n";
 
 // Track an event
 echo "Tracking event...\n";
-$client->track('user123', 'purchase_completed', [
+$client->track($userId, 'sdk_smoke_test', [
   'amount' => 99.99,
   'currency' => 'USD',
   'item_id' => 'prod-123',
