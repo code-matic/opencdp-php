@@ -31,15 +31,18 @@ class CDPClientTest extends TestCase
     $config = new CDPConfig(
       cdpApiKey: 'test-api-key',
       cdpEndpoint: 'https://api.test.com',
+      cdpFallbackEndpoints: [],
       debug: false,
       failOnException: false
     );
 
     $client = new CDPClient($config);
-    // Use reflection to replace the HTTP client
+    // Use reflection to replace the HTTP client and limit failover to the test host.
     $reflection = new \ReflectionClass($client);
     $property = $reflection->getProperty('httpClient');
     $property->setValue($client, $guzzleClient);
+    $baseUrlsProperty = $reflection->getProperty('baseUrls');
+    $baseUrlsProperty->setValue($client, ['https://api.test.com']);
 
     return $client;
   }
@@ -189,6 +192,8 @@ class CDPClientTest extends TestCase
     $reflection = new \ReflectionClass($client);
     $property = $reflection->getProperty('httpClient');
     $property->setValue($client, $guzzleClient);
+    $baseUrlsProperty = $reflection->getProperty('baseUrls');
+    $baseUrlsProperty->setValue($client, ['https://api.test.com']);
 
     $this->expectException(CDPException::class);
     $client->ping();

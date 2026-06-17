@@ -17,6 +17,8 @@ use Codematic\OpenCDP\Exceptions\CDPSmsException;
 class CDPClient
 {
   private Client $httpClient;
+  /** @var list<string> */
+  private array $baseUrls;
   private CDPConfig $config;
   private LoggerInterface $logger;
   private ?object $customerIoClient = null;
@@ -25,6 +27,10 @@ class CDPClient
   {
     $this->config = $config;
     $this->logger = $config->logger;
+    $this->baseUrls = GatewayUrls::resolveAllBaseUrls(
+      $config->cdpEndpoint,
+      $config->cdpFallbackEndpoints !== [] ? $config->cdpFallbackEndpoints : null
+    );
 
     // Initialize Guzzle HTTP client
     $this->httpClient = new Client([
@@ -41,6 +47,43 @@ class CDPClient
     if ($config->sendToCustomerIo && $config->customerIo !== null) {
       $this->initializeCustomerIo();
     }
+  }
+
+
+  /**
+   * @param array<string, mixed> $options
+   */
+  private function requestWithFailover(string $method, string $path, array $options = []): \Psr\Http\Message\ResponseInterface
+  {
+    $lastException = null;
+    $normalizedPath = ltrim($path, '/');
+    foreach ($this->baseUrls as $baseUrl) {
+      try {
+        $url = rtrim($baseUrl, '/') . '/' . $normalizedPath;
+        $requestOptions = array_merge([
+          'timeout' => $this->config->timeout / 1000,
+          'headers' => [
+            'Authorization' => $this->config->cdpApiKey,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+          ],
+        ], $options);
+        $response = $this->httpClient->request($method, $url, $requestOptions);
+        if ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300) {
+          return $response;
+        }
+        $lastException = new CDPException('HTTP ' . $response->getStatusCode(), $response->getStatusCode());
+      } catch (GuzzleException $e) {
+        $lastException = $e;
+        if ($this->config->debug) {
+          $this->logger->debug('[CDP] Gateway failed, trying next host', ['baseUrl' => $baseUrl, 'error' => $e->getMessage()]);
+        }
+      }
+    }
+    if ($lastException instanceof \Throwable) {
+      throw $lastException;
+    }
+    throw new CDPException('No gateway hosts configured', 500);
   }
 
   /**
@@ -91,7 +134,7 @@ class CDPClient
   private function validateConnection(): void
   {
     try {
-      $response = $this->httpClient->get('v1/health/ping');
+      $response = $this->requestWithFailover('GET', 'v1/health/ping');
 
       if ($this->config->debug) {
         $this->logger->debug('[CDP] Connection Established! Status: ' . $response->getStatusCode());
@@ -163,7 +206,7 @@ class CDPClient
 
     // Send to CDP
     try {
-      $this->httpClient->post('v1/persons/identify', [
+      $this->requestWithFailover('POST', 'v1/persons/identify', [
         'json' => [
           'identifier' => $identifier,
           'properties' => $normalizedProps,
@@ -240,7 +283,7 @@ class CDPClient
 
     // Send to CDP
     try {
-      $this->httpClient->post('v1/persons/track', [
+      $this->requestWithFailover('POST', 'v1/persons/track', [
         'json' => [
           'identifier' => $identifier,
           'eventName' => $eventName,
@@ -314,7 +357,7 @@ class CDPClient
     try {
       $payload = array_merge(['identifier' => $identifier], $params->toArray());
 
-      $this->httpClient->post('v1/persons/registerDevice', [
+      $this->requestWithFailover('POST', 'v1/persons/registerDevice', [
         'json' => $payload,
       ]);
 
@@ -374,7 +417,7 @@ class CDPClient
 
     // Send to CDP
     try {
-      $response = $this->httpClient->post('v1/send/email', [
+      $response = $this->requestWithFailover('POST', 'v1/send/email', [
         'json' => $payload,
       ]);
 
@@ -506,7 +549,7 @@ class CDPClient
 
     // Send to CDP
     try {
-      $response = $this->httpClient->post('v1/send/push', [
+      $response = $this->requestWithFailover('POST', 'v1/send/push', [
         'json' => $payload,
       ]);
 
@@ -579,7 +622,7 @@ class CDPClient
 
     // Send to CDP
     try {
-      $response = $this->httpClient->post('v1/send/sms', [
+      $response = $this->requestWithFailover('POST', 'v1/send/sms', [
         'json' => $payload,
       ]);
 

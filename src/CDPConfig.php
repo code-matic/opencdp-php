@@ -15,6 +15,9 @@ class CDPConfig
   /** @var string Base URL for the OpenCDP API */
   public readonly string $cdpEndpoint;
 
+  /** @var list<string> Fallback gateway base URLs */
+  public readonly array $cdpFallbackEndpoints;
+
   /** @var int Request timeout in milliseconds */
   public readonly int $timeout;
 
@@ -26,6 +29,9 @@ class CDPConfig
 
   /** @var LoggerInterface Logger instance */
   public readonly LoggerInterface $logger;
+
+  /** @var int Maximum concurrent requests */
+  public readonly int $maxConcurrentRequests;
 
   /** @var bool Send events to Customer.io */
   public readonly bool $sendToCustomerIo;
@@ -45,24 +51,28 @@ class CDPConfig
    */
   public function __construct(
     string $cdpApiKey,
-    string $cdpEndpoint = 'https://api.opencdp.io/gateway/data-gateway/',
+    string $cdpEndpoint = 'https://api.opencdp.com/gateway/data-gateway',
+    array $cdpFallbackEndpoints = [],
     int $timeout = 10000,
     bool $debug = false,
     bool $failOnException = false,
     ?LoggerInterface $logger = null,
     bool $sendToCustomerIo = false,
-    ?array $customerIo = null
+    ?array $customerIo = null,
+    int $maxConcurrentRequests = 10
   ) {
     if (empty(trim($cdpApiKey))) {
       throw new \InvalidArgumentException('cdpApiKey cannot be empty');
     }
 
     $this->cdpApiKey = $cdpApiKey;
-    $this->cdpEndpoint = $cdpEndpoint;
+    $this->cdpEndpoint = rtrim($cdpEndpoint, '/');
+    $this->cdpFallbackEndpoints = $cdpFallbackEndpoints;
     $this->timeout = max(1000, $timeout); // Minimum 1 second
     $this->debug = $debug;
     $this->failOnException = $failOnException;
     $this->logger = $logger ?? new DefaultLogger();
+    $this->maxConcurrentRequests = max(1, min(30, $maxConcurrentRequests));
     $this->sendToCustomerIo = $sendToCustomerIo;
 
     // Validate Customer.io config if dual-write is enabled
