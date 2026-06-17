@@ -51,7 +51,7 @@ class CDPConfig
    */
   public function __construct(
     string $cdpApiKey,
-    string $cdpEndpoint = 'https://api.opencdp.com/gateway/data-gateway',
+    string $cdpEndpoint = 'https://api.opencdp.io/gateway/data-gateway',
     array $cdpFallbackEndpoints = [],
     int $timeout = 10000,
     bool $debug = false,
