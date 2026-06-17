@@ -54,6 +54,17 @@
     "sort-packages": true,
     "optimize-autoloader": true
   },
+  "archive": {
+    "exclude": [
+      "tests",
+      "docs",
+      "phpunit.xml",
+      "validate.php",
+      ".github",
+      "CONTRIBUTING.md",
+      "DEPLOYMENT.md"
+    ]
+  },
   "minimum-stability": "stable",
   "prefer-stable": true
 }
