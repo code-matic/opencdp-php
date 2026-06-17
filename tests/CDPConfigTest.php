@@ -14,7 +14,7 @@ class CDPConfigTest extends TestCase
   {
     $config = new CDPConfig(cdpApiKey: 'test-api-key');
     $this->assertEquals('test-api-key', $config->cdpApiKey);
-    $this->assertEquals('https://api.opencdp.com/gateway/data-gateway', $config->cdpEndpoint);
+    $this->assertEquals('https://api.opencdp.io/gateway/data-gateway', $config->cdpEndpoint);
     $this->assertEquals(10000, $config->timeout);
     $this->assertFalse($config->debug);
     $this->assertFalse($config->failOnException);

@@ -6,11 +6,11 @@ namespace Codematic\OpenCDP;
 
 final class GatewayUrls
 {
-  public const DEFAULT_PRIMARY = 'https://api.opencdp.com/gateway/data-gateway';
+  public const DEFAULT_PRIMARY = 'https://api.opencdp.io/gateway/data-gateway';
 
   public const DEFAULT_FALLBACKS = [
+    'https://api.opencdp.com/gateway/data-gateway',
     'https://api.opencdp.xyz/gateway/data-gateway',
-    'https://api.opencdp.io/gateway/data-gateway',
   ];
 
   public static function normalizeBaseUrl(string $url): string
