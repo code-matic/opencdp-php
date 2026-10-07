@@ -20,5 +20,21 @@ jobs:
           php-version: ${{ matrix.php-version }}
           extensions: curl
           coverage: none
-      - run: composer install --no-interaction --no-progress
+      - name: Install dependencies
+        shell: bash
+        env:
+          COMPOSER_DISABLE_NETWORK_TIMEOUT: 1
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            echo "composer install attempt $attempt"
+            if composer install --no-interaction --no-progress --prefer-dist; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Composer install failed, retrying in 15 seconds..."
+            sleep 15
+          done
       - run: vendor/bin/phpunit
