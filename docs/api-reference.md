@@ -304,7 +304,17 @@ new SendEmailRequest(array $params)
 - `bcc` (array): BCC recipients
 - `cc` (array): CC recipients
 - `reply_to` (string): Reply-to address
+- `attachments` (array<string, string>): Filename => base64 content. Max 5 files, 2 MB decoded in total
 - And more...
+
+**Attachment helpers** (return a new request; the original is unchanged):
+
+```php
+public function withAttachment(string $filename, string $content, bool $encode = true): SendEmailRequest
+public function withAttachmentFile(string $path, ?string $filename = null): SendEmailRequest
+```
+
+`withAttachment()` base64-encodes `$content` unless `$encode` is `false`. `withAttachmentFile()` throws `InvalidArgumentException` when the file cannot be read.
 
 ### SendPushRequest
 
@@ -392,6 +402,7 @@ Validators::validateEventName(string $eventName): void
 Validators::validateEmail(string $email): void
 Validators::validatePhoneNumber(string $phone): void
 Validators::validateSendEmailRequest(SendEmailRequest $request): void
+Validators::validateAttachments(?array $attachments): void
 Validators::validateSendPushRequest(SendPushRequest $request): void
 Validators::validateSendSmsRequest(SendSmsRequest $request): void
 Validators::validateSendWhatsAppRequest(SendWhatsAppRequest $request): void

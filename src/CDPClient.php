@@ -547,8 +547,6 @@ class CDPClient
       $unsupportedFields[] = 'reply_to';
     if ($request->preheader !== null)
       $unsupportedFields[] = 'preheader';
-    if ($request->attachments !== null)
-      $unsupportedFields[] = 'attachments';
 
     if (!empty($unsupportedFields) && $this->config->debug) {
       $this->logger->warn(

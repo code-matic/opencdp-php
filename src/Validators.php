@@ -9,6 +9,10 @@ namespace Codematic\OpenCDP;
  */
 class Validators
 {
+  // Mirrors the gateway's limits (backend integrations/email-attachments.ts) so bad input fails before a network call.
+  public const MAX_EMAIL_ATTACHMENTS = 5;
+  public const MAX_EMAIL_ATTACHMENTS_DECODED_BYTES = 2 * 1024 * 1024; // 2 MB
+
   /**
    * Validates that the identifier is not empty
    *
@@ -188,6 +192,8 @@ class Validators
       throw new \InvalidArgumentException('headers must be an array');
     }
 
+    self::validateAttachments($request->attachments);
+
     // Check if this is a template or raw email request
     $isTemplateRequest = $request->transactional_message_id !== null;
 
@@ -207,6 +213,49 @@ class Validators
 
       if (!empty($errors)) {
         throw new \InvalidArgumentException('When not using a template: ' . implode(', ', $errors));
+      }
+    }
+  }
+
+  /**
+   * Validates an attachments map of filename => base64 content
+   *
+   * @param array<mixed, mixed>|null $attachments
+   * @throws \InvalidArgumentException
+   */
+  public static function validateAttachments(?array $attachments): void
+  {
+    if ($attachments === null) {
+      return;
+    }
+    if (count($attachments) > self::MAX_EMAIL_ATTACHMENTS) {
+      throw new \InvalidArgumentException('attachments may contain at most ' . self::MAX_EMAIL_ATTACHMENTS . ' files');
+    }
+
+    $totalDecodedBytes = 0;
+    foreach ($attachments as $filename => $content) {
+      $filename = (string) $filename;
+      if (
+        $filename === '' ||
+        str_contains($filename, '/') ||
+        str_contains($filename, '\\') ||
+        str_contains($filename, '..')
+      ) {
+        throw new \InvalidArgumentException('invalid attachment filename: ' . ($filename === '' ? '(empty)' : $filename));
+      }
+      if (!is_string($content) || $content === '') {
+        throw new \InvalidArgumentException("attachment \"{$filename}\" must be a non-empty base64 string");
+      }
+      // The gateway decodes leniently (Node's Buffer.from), so url-safe and unpadded base64 are accepted.
+      $decodedBytes = strlen(base64_decode(strtr(preg_replace('/\s/', '', $content) ?? '', '-_', '+/')));
+      if ($decodedBytes === 0) {
+        throw new \InvalidArgumentException("attachment \"{$filename}\" must be a valid base64 string");
+      }
+      $totalDecodedBytes += $decodedBytes;
+      if ($totalDecodedBytes > self::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES) {
+        throw new \InvalidArgumentException(
+          'attachments decoded size exceeds ' . self::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES . ' bytes (2 MB)'
+        );
       }
     }
   }

@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `attachments` is now supported by the backend and no longer logs a "not yet supported" warning
 - Message sends (`/v1/send/*`) now fail over to a fallback gateway host only when the primary provably did not process the request (connection refused, DNS failure, HTTP 502/503). Timeouts, 4xx, 500 and 504 are returned without retrying, to avoid delivering the same message twice. Identify, track and device registration are unchanged.
 
 ### Added
 
 - `sendWhatsApp()` - Send WhatsApp messages using a saved WhatsApp transactional
+- Email attachments: `SendEmailRequest::withAttachment()` and `SendEmailRequest::withAttachmentFile()` return a copy with the file base64-encoded, and `sendEmail()` validates attachments against the gateway's limits (at most 5 files, 2 MB decoded in total) before sending
 
 ## [1.0.2] - 2026-09-29
 

@@ -115,6 +115,7 @@ class SendEmailRequest
   public readonly ?string $plaintext_body;
   public readonly ?string $amp_body;
   public readonly ?string $language;
+  /** @var array<string, string>|null Filename => base64 content. Max 5 files, 2 MB decoded in total. */
   public readonly ?array $attachments;
 
   /**
@@ -183,6 +184,36 @@ class SendEmailRequest
       'language' => $this->language,
       'attachments' => $this->attachments,
     ], fn($value) => $value !== null);
+  }
+
+  /**
+   * Returns a copy of this request with the file attached. The request itself is immutable.
+   * Content is base64-encoded unless $encode is false, in which case it must already be base64
+   * (same semantics as customerio's attach).
+   */
+  public function withAttachment(string $filename, string $content, bool $encode = true): self
+  {
+    $params = $this->toArray();
+    $params['identifiers'] = $this->identifiers;
+    $params['attachments'] = array_merge(
+      $this->attachments ?? [],
+      [$filename => $encode ? base64_encode($content) : $content]
+    );
+    return new self($params);
+  }
+
+  /**
+   * Returns a copy of this request with the file at $path attached, named after the file unless $filename is given.
+   *
+   * @throws \InvalidArgumentException When the file cannot be read
+   */
+  public function withAttachmentFile(string $path, ?string $filename = null): self
+  {
+    $content = is_file($path) && is_readable($path) ? file_get_contents($path) : false;
+    if ($content === false) {
+      throw new \InvalidArgumentException("Cannot read attachment file: {$path}");
+    }
+    return $this->withAttachment($filename ?? basename($path), $content);
   }
 }
 

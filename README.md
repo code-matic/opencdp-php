@@ -177,6 +177,25 @@ $request = new SendEmailRequest([
 $response = $client->sendEmail($request);
 ```
 
+### Send Email with Attachments
+
+Attach up to 5 files (2 MB decoded in total). `SendEmailRequest` is immutable, so `withAttachment()` and `withAttachmentFile()` return a new request; content is base64-encoded for you:
+
+```php
+$request = (new SendEmailRequest([
+    'to' => 'user@example.com',
+    'identifiers' => Identifiers::withId('user123'),
+    'transactional_message_id' => 'INVOICE_EMAIL',
+]))
+    ->withAttachmentFile('/path/to/invoice.pdf')                // named "invoice.pdf"
+    ->withAttachment('notes.txt', 'Plain text content')         // base64-encoded by default
+    ->withAttachment('report.csv', $existingBase64, false);     // already base64, sent as-is
+
+$response = $client->sendEmail($request);
+```
+
+You can also pass `'attachments' => ['invoice.pdf' => '<base64>']` to the constructor. `sendEmail()` validates attachments before sending: at most 5 files, at most 2 MB decoded in total, filenames without `/`, `\` or `..`, and non-empty base64 content. The content type is inferred from the file extension.
+
 ### Send Push Notification
 
 ```php
@@ -377,7 +396,6 @@ Some email fields are accepted by the SDK but not yet processed by the backend. 
 - `fake_bcc` - Fake BCC functionality
 - `reply_to` - Reply-to address
 - `preheader` - Email preheader text
-- `attachments` - Email attachments
 
 These fields are included for future compatibility but currently have no effect on email delivery.
 
