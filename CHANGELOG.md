@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `attachments` is now supported by the backend and no longer logs a "not yet supported" warning
-- Message sends (`/v1/send/*`) now fail over to a fallback gateway host only when the primary provably did not process the request (connection refused, DNS failure, HTTP 502/503). Timeouts, 4xx, 500 and 504 are returned without retrying, to avoid delivering the same message twice. Identify, track and device registration are unchanged.
+- Message sends (`/v1/send/*`) now fail over to a fallback gateway host only when the primary provably did not process the request (connection refused, DNS failure, or Cloudflare 521/522/523/525/526). Timeouts, 4xx and other 5xx, including 502, 503 and 504, are returned without retrying, to avoid delivering the same message twice. Identify, track and device registration are unchanged.
 
 ### Added
 

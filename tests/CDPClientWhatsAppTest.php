@@ -90,13 +90,48 @@ class CDPClientWhatsAppTest extends TestCase
     $this->assertSame(['primary.test.com'], $this->requestedHosts());
   }
 
-  public function testFailsOverOn503(): void
+  /**
+   * @return array<string, array{0: int}>
+   */
+  public static function gatewayNeverReachedStatusProvider(): array
   {
-    $client = $this->createClient([new Response(503), new Response(200, [], '{}')]);
+    return ['HTTP 521' => [521], 'HTTP 522' => [522], 'HTTP 523' => [523], 'HTTP 525' => [525], 'HTTP 526' => [526]];
+  }
+
+  /**
+   * @dataProvider gatewayNeverReachedStatusProvider
+   */
+  public function testFailsOverWhenCloudflareNeverReachedTheGateway(int $status): void
+  {
+    $client = $this->createClient([new Response($status), new Response(200, [], '{}')]);
 
     $client->sendWhatsApp($this->request());
 
     $this->assertSame(['primary.test.com', 'fallback.test.com'], $this->requestedHosts());
+  }
+
+  /**
+   * @return array<string, array{0: int}>
+   */
+  public static function gatewayMayHaveQueuedStatusProvider(): array
+  {
+    return ['HTTP 500' => [500], 'HTTP 502' => [502], 'HTTP 503' => [503], 'HTTP 504' => [504], 'HTTP 520' => [520], 'HTTP 524' => [524]];
+  }
+
+  /**
+   * @dataProvider gatewayMayHaveQueuedStatusProvider
+   */
+  public function testDoesNotFailOverWhenTheGatewayMayHaveQueuedTheSend(int $status): void
+  {
+    $client = $this->createClient([new Response($status), new Response(200, [], '{}')]);
+
+    try {
+      $client->sendWhatsApp($this->request());
+      $this->fail('Expected CDPWhatsAppException');
+    } catch (CDPWhatsAppException $e) {
+      $this->assertSame($status, $e->status);
+    }
+    $this->assertSame(['primary.test.com'], $this->requestedHosts());
   }
 
   public function testFailsOverWhenConnectionIsRefused(): void

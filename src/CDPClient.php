@@ -57,10 +57,12 @@ class CDPClient
    * @param array<string, mixed> $options
    */
   /**
-   * 502/503 come from the load balancer when it could not reach the gateway, so nothing was processed.
-   * 504 is excluded because the gateway may have queued the message before the proxy gave up.
+   * Cloudflare (in front of the primary host) reports these when it never sent the request to the
+   * gateway: 521 refused, 522 connect timeout, 523 unreachable, 525/526 TLS failure. Generic 502/503
+   * are excluded because a proxy can return them after the gateway has already queued the message,
+   * and 524 because Cloudflare connected and waited for a response.
    */
-  private const SEND_RETRYABLE_STATUSES = [502, 503];
+  private const SEND_RETRYABLE_STATUSES = [521, 522, 523, 525, 526];
 
   /**
    * cURL errors raised before the request was sent: couldn't resolve host, couldn't connect, TLS
