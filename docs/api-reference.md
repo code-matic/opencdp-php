@@ -209,6 +209,41 @@ $response = $client->sendSms($request);
 
 ---
 
+### sendWhatsApp()
+
+```php
+public function sendWhatsApp(SendWhatsAppRequest $request): array
+```
+
+Send a WhatsApp message using a saved WhatsApp transactional.
+
+**Parameters:**
+- `$request` (SendWhatsAppRequest): WhatsApp request parameters
+
+**Returns:**
+- `array`: The gateway acknowledgement (transactional execution record). When `failOnException` is false and the call fails, `['ok' => false, 'error' => ...]`.
+
+**Throws:**
+- `InvalidArgumentException`: When validation fails (if `failOnException` is true)
+- `CDPWhatsAppException`: When WhatsApp sending fails (if `failOnException` is true). `$e->status` is the HTTP status, or `0` when the gateway could not be reached.
+
+- **A successful response means the message was queued, not delivered.** Delivery runs asynchronously, so a missing WhatsApp provider, no phone number, or a template rejected by Meta does not fail this call. The response holds the transactional execution record; keep its id to trace the send.
+- `template_variables` (`['header' => [...], 'body' => [...], 'button' => [...]]`) sets the template slots from code. Keys must be slot numbers (`'1'`, `'2'`, ...), so plain lists like `['Jane', '123']` are rejected. Values may use Liquid such as `{{customer.first_name}}`. Passing it **replaces all variables saved on the transactional**, so include every section the template needs.
+- `message_data` is available in the template as `{{trigger.<key>}}`.
+- Sends are not retried on another gateway host after a timeout or an HTTP error other than 502/503, because the message may already have been queued.
+
+**Example:**
+```php
+$request = new SendWhatsAppRequest(
+    identifiers: Identifiers::withId('user123'),
+    transactional_message_id: 'ORDER_WHATSAPP',
+    template_variables: ['body' => ['1' => 'Jane']]
+);
+$response = $client->sendWhatsApp($request);
+```
+
+---
+
 ## Type Classes
 
 ### Identifiers
@@ -296,6 +331,18 @@ new SendSmsRequest(
 )
 ```
 
+### SendWhatsAppRequest
+
+```php
+new SendWhatsAppRequest(
+    Identifiers $identifiers,
+    string|int $transactional_message_id,
+    ?string $to = null,
+    ?array $template_variables = null,
+    ?array $message_data = null
+)
+```
+
 ---
 
 ## Exception Classes
@@ -327,6 +374,12 @@ Extends `CDPException`. Thrown when SMS sending fails.
 
 **Error Code:** `SMS_SEND_FAILED`
 
+### CDPWhatsAppException
+
+Extends `CDPException`. Thrown when WhatsApp sending fails.
+
+**Error Code:** `WHATSAPP_SEND_FAILED`
+
 ---
 
 ## Validators
@@ -341,6 +394,7 @@ Validators::validatePhoneNumber(string $phone): void
 Validators::validateSendEmailRequest(SendEmailRequest $request): void
 Validators::validateSendPushRequest(SendPushRequest $request): void
 Validators::validateSendSmsRequest(SendSmsRequest $request): void
+Validators::validateSendWhatsAppRequest(SendWhatsAppRequest $request): void
 ```
 
 **Validation Rules:**

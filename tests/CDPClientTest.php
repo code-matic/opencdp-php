@@ -11,6 +11,7 @@ use Codematic\OpenCDP\Identifiers;
 use Codematic\OpenCDP\SendEmailRequest;
 use Codematic\OpenCDP\SendPushRequest;
 use Codematic\OpenCDP\SendSmsRequest;
+use Codematic\OpenCDP\SendWhatsAppRequest;
 use Codematic\OpenCDP\DeviceRegistrationParameters;
 use Codematic\OpenCDP\Exceptions\CDPException;
 use GuzzleHttp\Client;
@@ -160,6 +161,23 @@ class CDPClientTest extends TestCase
     );
 
     $response = $client->sendSms($request);
+    $this->assertIsArray($response);
+    $this->assertTrue($response['ok'] ?? false);
+  }
+
+  public function testSendWhatsAppWithValidRequest(): void
+  {
+    $client = $this->createMockClient([
+      new Response(200, [], json_encode(['ok' => true, 'message_id' => 'msg-123'])),
+    ]);
+
+    $request = new SendWhatsAppRequest(
+      identifiers: Identifiers::withId('user123'),
+      transactional_message_id: 'ORDER_WHATSAPP',
+      template_variables: ['body' => ['1' => 'Jane']]
+    );
+
+    $response = $client->sendWhatsApp($request);
     $this->assertIsArray($response);
     $this->assertTrue($response['ok'] ?? false);
   }

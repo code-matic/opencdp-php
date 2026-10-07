@@ -240,6 +240,26 @@ $request = new SendSmsRequest(
 $response = $client->sendSms($request);
 ```
 
+### Send WhatsApp
+
+```php
+use Codematic\OpenCDP\SendWhatsAppRequest;
+
+$request = new SendWhatsAppRequest(
+    identifiers: Identifiers::withId('user123'),
+    transactional_message_id: 'ORDER_WHATSAPP',
+    to: '+14155551234',              // Optional: overrides the profile phone number
+    message_data: ['order_number' => '12345']  // {{trigger.order_number}} in the template
+);
+
+$response = $client->sendWhatsApp($request);
+```
+
+- **A successful response means the message was queued, not delivered.** Delivery runs asynchronously, so a missing WhatsApp provider, no phone number, or a template rejected by Meta does not fail this call. The response holds the transactional execution record; keep its id to trace the send.
+- `template_variables` (`['header' => [...], 'body' => [...], 'button' => [...]]`) sets the template slots from code. Keys must be slot numbers (`'1'`, `'2'`, ...), so plain lists like `['Jane', '123']` are rejected. Values may use Liquid such as `{{customer.first_name}}`. Passing it **replaces all variables saved on the transactional**, so include every section the template needs.
+- `message_data` is available in the template as `{{trigger.<key>}}`.
+- Sends are not retried on another gateway host after a timeout or an HTTP error other than 502/503, because the message may already have been queued.
+
 ### Dual-write to Customer.io
 
 ```php
@@ -288,7 +308,7 @@ try {
 **Note on Return Types:**
 
 - Methods `identify()`, `track()`, and `registerDevice()` return `void`. When `failOnException` is `false`, errors are logged but no exception is thrown.
-- Methods `sendEmail()`, `sendPush()`, and `sendSms()` return `array`. When `failOnException` is `false` and an error occurs, they return an error array with `'ok' => false` and an `'error'` key containing error details.
+- Methods `sendEmail()`, `sendPush()`, `sendSms()`, and `sendWhatsApp()` return `array`. When `failOnException` is `false` and an error occurs, they return an error array with `'ok' => false` and an `'error'` key containing error details.
 
 ### Exception Types
 

@@ -303,4 +303,75 @@ class Validators
       throw new \InvalidArgumentException('message_data must be an array');
     }
   }
+
+  /**
+   * Validates send WhatsApp request
+   *
+   * @param SendWhatsAppRequest $request
+   * @throws \InvalidArgumentException
+   */
+  public static function validateSendWhatsAppRequest(SendWhatsAppRequest $request): void
+  {
+    $identifiersArray = $request->identifiers->toArray();
+    if (empty($identifiersArray)) {
+      throw new \InvalidArgumentException('identifiers must contain exactly one of: id, email, or cdp_id');
+    }
+
+    $hasId = isset($identifiersArray['id']) && $identifiersArray['id'] !== '';
+    $hasEmail = isset($identifiersArray['email']) && $identifiersArray['email'] !== '';
+    $hasCdpId = isset($identifiersArray['cdp_id']) && $identifiersArray['cdp_id'] !== '';
+
+    if (!$hasId && !$hasEmail && !$hasCdpId) {
+      throw new \InvalidArgumentException('identifiers must contain exactly one of: id, email, or cdp_id');
+    }
+
+    $count = ($hasId ? 1 : 0) + ($hasEmail ? 1 : 0) + ($hasCdpId ? 1 : 0);
+    if ($count > 1) {
+      throw new \InvalidArgumentException('identifiers must contain exactly one of: id, email, or cdp_id');
+    }
+
+    // Not empty(): a transactional id of "0" or 0 is valid.
+    if (trim((string) $request->transactional_message_id) === '') {
+      throw new \InvalidArgumentException('transactional_message_id is required');
+    }
+
+    if ($request->to !== null) {
+      self::validatePhoneNumber($request->to);
+    }
+
+    if ($request->template_variables !== null) {
+      if (!is_array($request->template_variables)) {
+        throw new \InvalidArgumentException('template_variables must be an array');
+      }
+
+      $allowedKeys = ['header', 'body', 'button'];
+      foreach ($request->template_variables as $key => $value) {
+        if (!in_array($key, $allowedKeys, true)) {
+          throw new \InvalidArgumentException('template_variables may only contain header, body, and button');
+        }
+        if (!is_array($value)) {
+          throw new \InvalidArgumentException("template_variables.{$key} must be an array");
+        }
+        // The gateway sends parameters by position and drops non-numeric button keys. This also
+        // rejects PHP lists (keys 0, 1, ...), which would be encoded as JSON arrays.
+        foreach (array_keys($value) as $slot) {
+          if (!preg_match('/^[1-9]\d*$/', (string) $slot)) {
+            throw new \InvalidArgumentException(
+              "template_variables.{$key} keys must be positional slot numbers (\"1\", \"2\", ...), got \"{$slot}\""
+            );
+          }
+        }
+      }
+    }
+
+    if ($request->message_data !== null) {
+      if (!is_array($request->message_data)) {
+        throw new \InvalidArgumentException('message_data must be an array');
+      }
+      // A PHP list is encoded as a JSON array, which the gateway rejects.
+      if ($request->message_data !== [] && array_keys($request->message_data) === range(0, count($request->message_data) - 1)) {
+        throw new \InvalidArgumentException('message_data must be an associative array');
+      }
+    }
+  }
 }

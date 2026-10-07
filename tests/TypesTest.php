@@ -10,6 +10,7 @@ use Codematic\OpenCDP\DeviceRegistrationParameters;
 use Codematic\OpenCDP\SendEmailRequest;
 use Codematic\OpenCDP\SendPushRequest;
 use Codematic\OpenCDP\SendSmsRequest;
+use Codematic\OpenCDP\SendWhatsAppRequest;
 
 class TypesTest extends TestCase
 {
@@ -167,5 +168,18 @@ class TypesTest extends TestCase
     );
     $this->assertInstanceOf(Identifiers::class, $request->identifiers);
     $this->assertEquals('WELCOME_SMS', $request->transactional_message_id);
+  }
+
+  public function testSendWhatsAppRequestWithRequiredFields(): void
+  {
+    $request = new SendWhatsAppRequest(
+      identifiers: Identifiers::withId('user123'),
+      transactional_message_id: 'ORDER_WHATSAPP',
+      template_variables: ['body' => ['1' => 'Jane']]
+    );
+    $this->assertInstanceOf(Identifiers::class, $request->identifiers);
+    $this->assertEquals('ORDER_WHATSAPP', $request->transactional_message_id);
+    $array = $request->toArray();
+    $this->assertSame(['1' => 'Jane'], $array['template_variables']['body']);
   }
 }

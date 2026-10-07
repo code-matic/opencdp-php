@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Message sends (`/v1/send/*`) now fail over to a fallback gateway host only when the primary provably did not process the request (connection refused, DNS failure, HTTP 502/503). Timeouts, 4xx, 500 and 504 are returned without retrying, to avoid delivering the same message twice. Identify, track and device registration are unchanged.
+
+### Added
+
+- `sendWhatsApp()` - Send WhatsApp messages using a saved WhatsApp transactional
+
 ## [1.0.2] - 2026-09-29
 
 ### Changed

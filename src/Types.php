@@ -245,3 +245,32 @@ class SendSmsRequest
     ], fn($value) => $value !== null);
   }
 }
+
+/**
+ * Send WhatsApp request
+ */
+class SendWhatsAppRequest
+{
+  public function __construct(
+    public readonly Identifiers $identifiers,
+    public readonly string|int $transactional_message_id,
+    public readonly ?string $to = null,
+    public readonly ?array $template_variables = null,
+    public readonly ?array $message_data = null
+  ) {
+  }
+
+  /**
+   * @return array<string, mixed>
+   */
+  public function toArray(): array
+  {
+    return array_filter([
+      'identifiers' => $this->identifiers->toArray(),
+      'transactional_message_id' => $this->transactional_message_id,
+      'to' => $this->to,
+      'template_variables' => $this->template_variables,
+      'message_data' => $this->message_data,
+    ], fn($value) => $value !== null);
+  }
+}
