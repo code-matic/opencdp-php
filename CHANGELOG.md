@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-07
+
 ### Changed
 
 - Requires the `curl` PHP extension (`ext-curl`). Send failover relies on cURL error codes to prove a host was never reached; without them a failed send is not retried.
