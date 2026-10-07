@@ -115,6 +115,7 @@ class SendEmailRequest
   public readonly ?string $plaintext_body;
   public readonly ?string $amp_body;
   public readonly ?string $language;
+  /** @var array<string, string>|null Filename => base64 content. Max 5 files, 2 MB decoded in total. */
   public readonly ?array $attachments;
 
   /**
@@ -184,6 +185,44 @@ class SendEmailRequest
       'attachments' => $this->attachments,
     ], fn($value) => $value !== null);
   }
+
+  /**
+   * Returns a copy of this request with the file attached. The request itself is immutable.
+   * Content is base64-encoded unless $encode is false, in which case it must already be base64
+   * (same semantics as customerio's attach).
+   */
+  public function withAttachment(string $filename, string $content, bool $encode = true): self
+  {
+    $params = $this->toArray();
+    $params['identifiers'] = $this->identifiers;
+    // Assign rather than array_merge(), which renumbers numeric filenames such as "123".
+    $attachments = $this->attachments ?? [];
+    $attachments[$filename] = $encode ? base64_encode($content) : $content;
+    $params['attachments'] = $attachments;
+    return new self($params);
+  }
+
+  /**
+   * Returns a copy of this request with the file at $path attached, named after the file unless $filename is given.
+   *
+   * @throws \InvalidArgumentException When the file cannot be read or is larger than 2 MB
+   */
+  public function withAttachmentFile(string $path, ?string $filename = null): self
+  {
+    // Read at most one byte past the limit so a huge file is rejected without loading it into memory.
+    $content = is_file($path) && is_readable($path)
+      ? file_get_contents($path, false, null, 0, Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES + 1)
+      : false;
+    if ($content === false) {
+      throw new \InvalidArgumentException("Cannot read attachment file: {$path}");
+    }
+    if (strlen($content) > Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES) {
+      throw new \InvalidArgumentException(
+        "attachment file {$path} exceeds " . Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES . ' bytes (2 MB)'
+      );
+    }
+    return $this->withAttachment($filename ?? basename($path), $content);
+  }
 }
 
 /**
@@ -241,6 +280,35 @@ class SendSmsRequest
       'to' => $this->to,
       'from' => $this->from,
       'body' => $this->body,
+      'message_data' => $this->message_data,
+    ], fn($value) => $value !== null);
+  }
+}
+
+/**
+ * Send WhatsApp request
+ */
+class SendWhatsAppRequest
+{
+  public function __construct(
+    public readonly Identifiers $identifiers,
+    public readonly string|int $transactional_message_id,
+    public readonly ?string $to = null,
+    public readonly ?array $template_variables = null,
+    public readonly ?array $message_data = null
+  ) {
+  }
+
+  /**
+   * @return array<string, mixed>
+   */
+  public function toArray(): array
+  {
+    return array_filter([
+      'identifiers' => $this->identifiers->toArray(),
+      'transactional_message_id' => $this->transactional_message_id,
+      'to' => $this->to,
+      'template_variables' => $this->template_variables,
       'message_data' => $this->message_data,
     ], fn($value) => $value !== null);
   }

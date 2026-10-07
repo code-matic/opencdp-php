@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Codematic\OpenCDP;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use Codematic\OpenCDP\Exceptions\CDPException;
 use Codematic\OpenCDP\Exceptions\CDPEmailException;
 use Codematic\OpenCDP\Exceptions\CDPPushException;
 use Codematic\OpenCDP\Exceptions\CDPSmsException;
+use Codematic\OpenCDP\Exceptions\CDPWhatsAppException;
 
 /**
  * CDP Client for interacting with the Codematic Customer Data Platform
@@ -51,10 +55,33 @@ class CDPClient
 
 
   /**
-   * @param array<string, mixed> $options
+   * Cloudflare (in front of the primary host) reports these when it never sent the request to the
+   * gateway: 521 refused, 523 unreachable, 525/526 TLS failure. Generic 502/503
+   * are excluded because a proxy can return them after the gateway has already queued the message,
+   * and 522/524 because Cloudflare may already have sent the request when it timed out.
    */
-  private function requestWithFailover(string $method, string $path, array $options = []): \Psr\Http\Message\ResponseInterface
-  {
+  private const SEND_RETRYABLE_STATUSES = [521, 523, 525, 526];
+
+  /**
+   * cURL errors raised before the request was sent: couldn't resolve host, couldn't connect, TLS
+   * handshake failed. Guzzle also wraps timeouts and empty replies in ConnectException, but those can
+   * happen after the gateway accepted the request, so they are not listed. composer.json requires
+   * ext-curl so Guzzle always uses its cURL handler; other handlers report no errno, and a send that
+   * fails without one is never retried.
+   */
+  private const SEND_RETRYABLE_CURL_ERRNOS = [6, 7, 35];
+
+  /**
+   * @param array<string, mixed> $options
+   * @param bool $sendSafe Message sends are not idempotent, so in this mode we only move to the next
+   *   host when the current one provably never processed the request.
+   */
+  private function requestWithFailover(
+    string $method,
+    string $path,
+    array $options = [],
+    bool $sendSafe = false
+  ): \Psr\Http\Message\ResponseInterface {
     $lastException = null;
     $normalizedPath = ltrim($path, '/');
     foreach ($this->baseUrls as $baseUrl) {
@@ -67,14 +94,25 @@ class CDPClient
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
           ],
+          // Sends never follow redirects: a failed connection to a redirect target would look like the
+          // original host was never reached, and failover would deliver the message twice.
+          'allow_redirects' => !$sendSafe,
         ], $options);
         $response = $this->httpClient->request($method, $url, $requestOptions);
         if ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300) {
           return $response;
         }
+        if ($sendSafe) {
+          // Guzzle does not throw for 3xx; raise it as a RequestException so the send methods report
+          // the status the same way they do for 4xx/5xx. A redirect is never retried.
+          throw RequestException::create(new GuzzleRequest($method, $url), $response);
+        }
         $lastException = new CDPException('HTTP ' . $response->getStatusCode(), $response->getStatusCode());
       } catch (GuzzleException $e) {
         $lastException = $e;
+        if ($sendSafe && !self::isSafeToRetrySend($e)) {
+          throw $e;
+        }
         if ($this->config->debug) {
           $this->logger->debug('[CDP] Gateway failed, trying next host', ['baseUrl' => $baseUrl, 'error' => $e->getMessage()]);
         }
@@ -84,6 +122,18 @@ class CDPClient
       throw $lastException;
     }
     throw new CDPException('No gateway hosts configured', 500);
+  }
+
+  private static function isSafeToRetrySend(GuzzleException $e): bool
+  {
+    if ($e instanceof RequestException && $e->hasResponse()) {
+      return in_array($e->getResponse()->getStatusCode(), self::SEND_RETRYABLE_STATUSES, true);
+    }
+    if ($e instanceof ConnectException) {
+      $errno = $e->getHandlerContext()['errno'] ?? null;
+      return in_array($errno, self::SEND_RETRYABLE_CURL_ERRNOS, true);
+    }
+    return false;
   }
 
   /**
@@ -409,6 +459,10 @@ class CDPClient
 
     // Build the payload
     $payload = $request->toArray();
+    // A PHP array with sequential keys (including []) encodes as a JSON list; the gateway needs an object.
+    if (isset($payload['attachments'])) {
+      $payload['attachments'] = (object) $payload['attachments'];
+    }
 
     // Warning about Customer.io dual-write
     if ($this->config->sendToCustomerIo && $this->customerIoClient !== null && $this->config->debug) {
@@ -419,7 +473,7 @@ class CDPClient
     try {
       $response = $this->requestWithFailover('POST', 'v1/send/email', [
         'json' => $payload,
-      ]);
+      ], true);
 
       $data = json_decode((string) $response->getBody(), true);
 
@@ -430,7 +484,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 
@@ -505,8 +560,6 @@ class CDPClient
       $unsupportedFields[] = 'reply_to';
     if ($request->preheader !== null)
       $unsupportedFields[] = 'preheader';
-    if ($request->attachments !== null)
-      $unsupportedFields[] = 'attachments';
 
     if (!empty($unsupportedFields) && $this->config->debug) {
       $this->logger->warn(
@@ -551,7 +604,7 @@ class CDPClient
     try {
       $response = $this->requestWithFailover('POST', 'v1/send/push', [
         'json' => $payload,
-      ]);
+      ], true);
 
       $data = json_decode((string) $response->getBody(), true);
 
@@ -562,7 +615,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 
@@ -624,7 +678,7 @@ class CDPClient
     try {
       $response = $this->requestWithFailover('POST', 'v1/send/sms', [
         'json' => $payload,
-      ]);
+      ], true);
 
       $data = json_decode((string) $response->getBody(), true);
 
@@ -635,7 +689,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 
@@ -651,6 +706,82 @@ class CDPClient
 
       if ($this->config->failOnException) {
         $exception = new CDPSmsException($responseData['message'] ?? $e->getMessage(), $statusCode);
+        $exception->summary = $errorSummary;
+        $exception->status = $statusCode;
+        throw $exception;
+      }
+
+      return ['ok' => false, 'error' => $errorSummary];
+    }
+  }
+
+  /**
+   * Send a WhatsApp message using the OpenCDP transactional WhatsApp service
+   *
+   * @param SendWhatsAppRequest $request The send WhatsApp request parameters
+   * @return array<string, mixed> Response from the API. Returns error array with 'ok' => false when failOnException is false and an error occurs.
+   * @throws CDPWhatsAppException Only when config->failOnException === true
+   * @throws \InvalidArgumentException Only when config->failOnException === true
+   */
+  public function sendWhatsApp(SendWhatsAppRequest $request): array
+  {
+    try {
+      Validators::validateSendWhatsAppRequest($request);
+    } catch (\InvalidArgumentException $e) {
+      if ($this->config->debug) {
+        $this->logger->error('[CDP] Send WhatsApp validation error', ['error' => $e->getMessage()]);
+      }
+      if ($this->config->failOnException) {
+        throw $e;
+      }
+      return ['ok' => false, 'error' => $e->getMessage()];
+    }
+
+    $payload = $request->toArray();
+    $payload['transactional_message_id'] = (string) $payload['transactional_message_id'];
+    // Cast to objects so empty arrays encode as {} rather than [], which the gateway rejects.
+    if (isset($payload['template_variables'])) {
+      $payload['template_variables'] = (object) array_map(fn($slots) => (object) $slots, $payload['template_variables']);
+    }
+    if (isset($payload['message_data'])) {
+      $payload['message_data'] = (object) $payload['message_data'];
+    }
+
+    if ($this->config->sendToCustomerIo && $this->customerIoClient !== null && $this->config->debug) {
+      $this->logger->warn('[CDP] Warning: Transactional messaging WhatsApp will NOT be sent to Customer.io to avoid sending twice. To turn this warning off set `sendToCustomerIo` to false.');
+    }
+
+    try {
+      $response = $this->requestWithFailover('POST', 'v1/send/whatsapp', [
+        'json' => $payload,
+      ], true);
+
+      $data = json_decode((string) $response->getBody(), true);
+
+      if ($this->config->debug) {
+        $this->logger->debug('[CDP] WhatsApp sent successfully');
+      }
+
+      return $data ?? ['ok' => true];
+    } catch (GuzzleException $e) {
+      $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
+      $responseBody = $this->extractResponseBody($response);
+      $responseData = $responseBody ? json_decode($responseBody, true) : null;
+
+      $errorSummary = [
+        'message' => $e->getMessage(),
+        'status' => $statusCode,
+        'data' => $responseData['message'] ?? '[truncated]',
+      ];
+
+      if ($this->config->debug) {
+        $this->logger->error('[CDP] Send WhatsApp error', ['errorSummary' => $errorSummary]);
+      }
+
+      if ($this->config->failOnException) {
+        $exception = new CDPWhatsAppException($responseData['message'] ?? $e->getMessage(), $statusCode);
         $exception->summary = $errorSummary;
         $exception->status = $statusCode;
         throw $exception;

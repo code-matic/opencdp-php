@@ -9,6 +9,7 @@ use Codematic\OpenCDP\Validators;
 use Codematic\OpenCDP\SendEmailRequest;
 use Codematic\OpenCDP\SendPushRequest;
 use Codematic\OpenCDP\SendSmsRequest;
+use Codematic\OpenCDP\SendWhatsAppRequest;
 use Codematic\OpenCDP\Identifiers;
 
 class ValidatorsTest extends TestCase
@@ -266,5 +267,30 @@ class ValidatorsTest extends TestCase
 
     $this->expectNotToPerformAssertions();
     Validators::validateSendSmsRequest($request);
+  }
+
+  public function testValidateSendWhatsAppRequestWithValidRequest(): void
+  {
+    $request = new SendWhatsAppRequest(
+      identifiers: Identifiers::withId('user123'),
+      transactional_message_id: 'ORDER_WHATSAPP',
+      to: '+14155551234',
+      template_variables: ['body' => ['1' => 'Jane']]
+    );
+
+    $this->expectNotToPerformAssertions();
+    Validators::validateSendWhatsAppRequest($request);
+  }
+
+  public function testValidateSendWhatsAppRequestRejectsMissingTemplateId(): void
+  {
+    $request = new SendWhatsAppRequest(
+      identifiers: Identifiers::withId('user123'),
+      transactional_message_id: ''
+    );
+
+    $this->expectException(\InvalidArgumentException::class);
+    $this->expectExceptionMessage('transactional_message_id is required');
+    Validators::validateSendWhatsAppRequest($request);
   }
 }

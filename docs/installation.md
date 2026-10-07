@@ -3,6 +3,7 @@
 ## Requirements
 
 - PHP 8.0 or higher
+- The `curl` PHP extension (used to decide when a failed send can safely be retried on a fallback host)
 - Composer for dependency management
 
 ## Installation via Composer
