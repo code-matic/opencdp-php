@@ -161,6 +161,23 @@ class CDPClientWhatsAppTest extends TestCase
     $this->assertSame(['primary.test.com'], $this->requestedHosts());
   }
 
+  public function testDoesNotFailOverOnConnectErrorWithoutCurlErrno(): void
+  {
+    // Non-cURL handlers give no errno, so the SDK cannot prove the request was never sent.
+    $client = $this->createClient([
+      new ConnectException('Connection failed', new GuzzleRequest('POST', '/')),
+      new Response(200, [], '{}'),
+    ]);
+
+    try {
+      $client->sendWhatsApp($this->request());
+      $this->fail('Expected CDPWhatsAppException');
+    } catch (CDPWhatsAppException $e) {
+      $this->assertSame(0, $e->status);
+    }
+    $this->assertSame(['primary.test.com'], $this->requestedHosts());
+  }
+
   public function testFailsOverWhenConnectionIsRefused(): void
   {
     $client = $this->createClient([

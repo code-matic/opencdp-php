@@ -18,6 +18,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request as GuzzleRequest;
 
@@ -215,5 +216,43 @@ class CDPClientTest extends TestCase
 
     $this->expectException(CDPException::class);
     $client->ping();
+  }
+
+  /**
+   * @return array<string, array{0: string}>
+   */
+  public static function sendActionProvider(): array
+  {
+    return ['email' => ['email'], 'push' => ['push'], 'sms' => ['sms']];
+  }
+
+  /**
+   * @dataProvider sendActionProvider
+   */
+  public function testSendReportsStatusZeroWhenNoResponseArrives(string $action): void
+  {
+    // cURL errno 28 is a timeout: the gateway may have accepted the send, so it is not retried.
+    $client = $this->createMockClient([
+      new ConnectException('Operation timed out', new GuzzleRequest('POST', '/'), null, ['errno' => 28]),
+    ]);
+
+    $response = match ($action) {
+      'email' => $client->sendEmail(new SendEmailRequest([
+        'to' => 'user@example.com',
+        'identifiers' => Identifiers::withId('user123'),
+        'transactional_message_id' => 'WELCOME_EMAIL',
+      ])),
+      'push' => $client->sendPush(new SendPushRequest(
+        identifiers: Identifiers::withId('user123'),
+        transactional_message_id: 'WELCOME_PUSH'
+      )),
+      'sms' => $client->sendSms(new SendSmsRequest(
+        identifiers: Identifiers::withId('user123'),
+        transactional_message_id: 'WELCOME_SMS'
+      )),
+    };
+
+    $this->assertFalse($response['ok']);
+    $this->assertSame(0, $response['error']['status']);
   }
 }

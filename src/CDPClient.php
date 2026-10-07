@@ -55,9 +55,6 @@ class CDPClient
 
 
   /**
-   * @param array<string, mixed> $options
-   */
-  /**
    * Cloudflare (in front of the primary host) reports these when it never sent the request to the
    * gateway: 521 refused, 523 unreachable, 525/526 TLS failure. Generic 502/503
    * are excluded because a proxy can return them after the gateway has already queued the message,
@@ -68,11 +65,14 @@ class CDPClient
   /**
    * cURL errors raised before the request was sent: couldn't resolve host, couldn't connect, TLS
    * handshake failed. Guzzle also wraps timeouts and empty replies in ConnectException, but those can
-   * happen after the gateway accepted the request, so they are not listed.
+   * happen after the gateway accepted the request, so they are not listed. composer.json requires
+   * ext-curl so Guzzle always uses its cURL handler; other handlers report no errno, and a send that
+   * fails without one is never retried.
    */
   private const SEND_RETRYABLE_CURL_ERRNOS = [6, 7, 35];
 
   /**
+   * @param array<string, mixed> $options
    * @param bool $sendSafe Message sends are not idempotent, so in this mode we only move to the next
    *   host when the current one provably never processed the request.
    */
@@ -459,6 +459,10 @@ class CDPClient
 
     // Build the payload
     $payload = $request->toArray();
+    // A PHP array with sequential keys (including []) encodes as a JSON list; the gateway needs an object.
+    if (isset($payload['attachments'])) {
+      $payload['attachments'] = (object) $payload['attachments'];
+    }
 
     // Warning about Customer.io dual-write
     if ($this->config->sendToCustomerIo && $this->customerIoClient !== null && $this->config->debug) {
@@ -480,7 +484,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 
@@ -610,7 +615,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 
@@ -683,7 +689,8 @@ class CDPClient
       return $data ?? ['ok' => true];
     } catch (GuzzleException $e) {
       $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-      $statusCode = $response ? $response->getStatusCode() : 400;
+      // 0 means the request never got a response (network error or timeout), not a gateway rejection.
+      $statusCode = $response ? $response->getStatusCode() : 0;
       $responseBody = $this->extractResponseBody($response);
       $responseData = $responseBody ? json_decode($responseBody, true) : null;
 

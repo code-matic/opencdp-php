@@ -13,6 +13,7 @@ composer require code-matic/opencdp-php
 ## Requirements
 
 - PHP 8.0 or higher
+- The `curl` PHP extension. Message sends use cURL's error codes to tell a host that was never reached (safe to retry on a fallback host) from one that may already have queued the message.
 - Guzzle HTTP client (automatically installed)
 
 ### Optional Dependencies

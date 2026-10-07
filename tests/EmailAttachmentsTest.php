@@ -112,6 +112,7 @@ class EmailAttachmentsTest extends TestCase
       'data after padding' => [['a.pdf' => 'aGVsbG8=trailing-data'], 'attachment "a.pdf" must be a valid base64 string'],
       'padding in the middle' => [['a.pdf' => 'aG=VsbG8'], 'attachment "a.pdf" must be a valid base64 string'],
       'dangling single character' => [['a.pdf' => 'aGVsb'], 'attachment "a.pdf" must be a valid base64 string'],
+      'mixed standard and url-safe alphabets' => [['a.bin' => '+/-_'], 'attachment "a.bin" must be a valid base64 string'],
       'only whitespace' => [['a.pdf' => " \n\t "], 'attachment "a.pdf" must be a valid base64 string'],
     ];
   }
@@ -226,5 +227,57 @@ class EmailAttachmentsTest extends TestCase
     $this->expectExceptionMessage('Cannot read attachment file');
 
     $this->emailRequest()->withAttachmentFile(sys_get_temp_dir() . '/does-not-exist-' . uniqid() . '.pdf');
+  }
+
+  public function testSendEmailEncodesNumericFilenamesAsAJsonObject(): void
+  {
+    $client = $this->createClient(true);
+
+    $client->sendEmail($this->emailRequest(['0' => base64_encode('a'), '1' => base64_encode('b')]));
+
+    $body = (string) $this->history[0]['request']->getBody();
+    $this->assertStringContainsString('"attachments":{"0":"YQ==","1":"Yg=="}', $body);
+  }
+
+  public function testSendEmailEncodesEmptyAttachmentsAsAJsonObject(): void
+  {
+    $client = $this->createClient(true);
+
+    $client->sendEmail($this->emailRequest([]));
+
+    $body = (string) $this->history[0]['request']->getBody();
+    $this->assertStringContainsString('"attachments":{}', $body);
+  }
+
+  public function testWithAttachmentKeepsNumericFilenames(): void
+  {
+    $request = $this->emailRequest()->withAttachment('123', 'a')->withAttachment('456', 'b');
+
+    $this->assertSame(['123' => 'YQ==', '456' => 'Yg=='], $request->attachments);
+  }
+
+  public function testWithAttachmentFileRejectsFilesOverTheLimitWithoutReadingThem(): void
+  {
+    $path = sys_get_temp_dir() . '/opencdp-test-big-' . uniqid() . '.bin';
+    // Sparse 1 GB file: reading it fully would exhaust the default memory limit.
+    $handle = fopen($path, 'w');
+    $this->assertNotFalse($handle);
+    ftruncate($handle, 1024 * 1024 * 1024);
+    fclose($handle);
+
+    try {
+      $this->expectException(\InvalidArgumentException::class);
+      $this->expectExceptionMessage('exceeds 2097152 bytes (2 MB)');
+      $this->emailRequest()->withAttachmentFile($path);
+    } finally {
+      unlink($path);
+    }
+  }
+
+  public function testValidateAttachmentsAcceptsPureStandardAndPureUrlSafeAlphabets(): void
+  {
+    $this->expectNotToPerformAssertions();
+
+    Validators::validateAttachments(['standard.bin' => '+/8=', 'urlsafe.bin' => '-_8=']);
   }
 }

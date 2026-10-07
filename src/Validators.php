@@ -268,7 +268,7 @@ class Validators
   }
 
   /**
-   * Standard or url-safe alphabet, padding optional, "=" only at the end. base64_decode() skips invalid
+   * Standard or url-safe alphabet (not both), padding optional, "=" only at the end. base64_decode() skips invalid
    * characters and anything after padding, so decoding cannot be used to validate. Checked without a
    * regex because PCRE hits its backtracking limit on attachment-sized strings.
    */
@@ -278,6 +278,10 @@ class Validators
     $padding = strlen($value) - strlen($data);
     $length = strlen($data);
     if ($length === 0 || $padding > 2 || strspn($data, self::BASE64_ALPHABET) !== $length) {
+      return false;
+    }
+    // Mixing "+/" with "-_" is valid in neither the standard nor the url-safe alphabet.
+    if (strpbrk($data, '+/') !== false && strpbrk($data, '-_') !== false) {
       return false;
     }
     if ($length % 4 === 1) {

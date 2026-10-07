@@ -195,23 +195,31 @@ class SendEmailRequest
   {
     $params = $this->toArray();
     $params['identifiers'] = $this->identifiers;
-    $params['attachments'] = array_merge(
-      $this->attachments ?? [],
-      [$filename => $encode ? base64_encode($content) : $content]
-    );
+    // Assign rather than array_merge(), which renumbers numeric filenames such as "123".
+    $attachments = $this->attachments ?? [];
+    $attachments[$filename] = $encode ? base64_encode($content) : $content;
+    $params['attachments'] = $attachments;
     return new self($params);
   }
 
   /**
    * Returns a copy of this request with the file at $path attached, named after the file unless $filename is given.
    *
-   * @throws \InvalidArgumentException When the file cannot be read
+   * @throws \InvalidArgumentException When the file cannot be read or is larger than 2 MB
    */
   public function withAttachmentFile(string $path, ?string $filename = null): self
   {
-    $content = is_file($path) && is_readable($path) ? file_get_contents($path) : false;
+    // Read at most one byte past the limit so a huge file is rejected without loading it into memory.
+    $content = is_file($path) && is_readable($path)
+      ? file_get_contents($path, false, null, 0, Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES + 1)
+      : false;
     if ($content === false) {
       throw new \InvalidArgumentException("Cannot read attachment file: {$path}");
+    }
+    if (strlen($content) > Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES) {
+      throw new \InvalidArgumentException(
+        "attachment file {$path} exceeds " . Validators::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES . ' bytes (2 MB)'
+      );
     }
     return $this->withAttachment($filename ?? basename($path), $content);
   }
