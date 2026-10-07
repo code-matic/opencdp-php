@@ -230,7 +230,7 @@ Send a WhatsApp message using a saved WhatsApp transactional.
 - **A successful response means the message was queued, not delivered.** Delivery runs asynchronously, so a missing WhatsApp provider, no phone number, or a template rejected by Meta does not fail this call. The response holds the transactional execution record; keep its id to trace the send.
 - `template_variables` (`['header' => [...], 'body' => [...], 'button' => [...]]`) sets the template slots from code. Keys must be slot numbers (`'1'`, `'2'`, ...), so plain lists like `['Jane', '123']` are rejected. Values may use Liquid such as `{{customer.first_name}}`. Passing it **replaces all variables saved on the transactional**, so include every section the template needs.
 - `message_data` is available in the template as `{{trigger.<key>}}`.
-- Sends are not retried on another gateway host after a timeout or an HTTP error, because the message may already have been queued. The exceptions are connection failures and the Cloudflare errors 521, 522, 523, 525 and 526, which mean the gateway never received the request.
+- Sends are not retried on another gateway host after a timeout or an HTTP error, because the message may already have been queued. The exceptions are connection failures and the Cloudflare errors 521, 523, 525 and 526, which mean the gateway never received the request.
 
 **Example:**
 ```php

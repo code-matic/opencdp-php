@@ -95,7 +95,7 @@ class CDPClientWhatsAppTest extends TestCase
    */
   public static function gatewayNeverReachedStatusProvider(): array
   {
-    return ['HTTP 521' => [521], 'HTTP 522' => [522], 'HTTP 523' => [523], 'HTTP 525' => [525], 'HTTP 526' => [526]];
+    return ['HTTP 521' => [521], 'HTTP 523' => [523], 'HTTP 525' => [525], 'HTTP 526' => [526]];
   }
 
   /**
@@ -115,7 +115,7 @@ class CDPClientWhatsAppTest extends TestCase
    */
   public static function gatewayMayHaveQueuedStatusProvider(): array
   {
-    return ['HTTP 500' => [500], 'HTTP 502' => [502], 'HTTP 503' => [503], 'HTTP 504' => [504], 'HTTP 520' => [520], 'HTTP 524' => [524]];
+    return ['HTTP 500' => [500], 'HTTP 502' => [502], 'HTTP 503' => [503], 'HTTP 504' => [504], 'HTTP 520' => [520], 'HTTP 522' => [522], 'HTTP 524' => [524]];
   }
 
   /**
@@ -131,6 +131,33 @@ class CDPClientWhatsAppTest extends TestCase
     } catch (CDPWhatsAppException $e) {
       $this->assertSame($status, $e->status);
     }
+    $this->assertSame(['primary.test.com'], $this->requestedHosts());
+  }
+
+  public function testDoesNotFollowOrFailOverOnRedirect(): void
+  {
+    // If the redirect were followed, the second mocked response would make the send succeed.
+    $client = $this->createClient([
+      new Response(307, ['Location' => 'https://fallback.test.com/v1/send/whatsapp']),
+      new Response(200, [], '{}'),
+    ]);
+
+    try {
+      $client->sendWhatsApp($this->request());
+      $this->fail('Expected CDPWhatsAppException');
+    } catch (CDPWhatsAppException $e) {
+      $this->assertSame(307, $e->status);
+    }
+    $this->assertSame(['primary.test.com'], $this->requestedHosts());
+  }
+
+  public function testReturnsErrorInsteadOfThrowingOnRedirectWhenNotFailingOnException(): void
+  {
+    $client = $this->createClient([new Response(307, ['Location' => 'https://elsewhere.test.com/'])], false);
+
+    $result = $client->sendWhatsApp($this->request());
+
+    $this->assertFalse($result['ok']);
     $this->assertSame(['primary.test.com'], $this->requestedHosts());
   }
 

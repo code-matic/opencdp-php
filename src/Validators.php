@@ -12,6 +12,8 @@ class Validators
   // Mirrors the gateway's limits (backend integrations/email-attachments.ts) so bad input fails before a network call.
   public const MAX_EMAIL_ATTACHMENTS = 5;
   public const MAX_EMAIL_ATTACHMENTS_DECODED_BYTES = 2 * 1024 * 1024; // 2 MB
+  private const MAX_EMAIL_ATTACHMENTS_ENCODED_LENGTH = 2796204; // ceil(2 MB / 3) * 4
+  private const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_';
 
   /**
    * Validates that the identifier is not empty
@@ -246,18 +248,42 @@ class Validators
       if (!is_string($content) || $content === '') {
         throw new \InvalidArgumentException("attachment \"{$filename}\" must be a non-empty base64 string");
       }
-      // The gateway decodes leniently (Node's Buffer.from), so url-safe and unpadded base64 are accepted.
-      $decodedBytes = strlen(base64_decode(strtr(preg_replace('/\s/', '', $content) ?? '', '-_', '+/')));
-      if ($decodedBytes === 0) {
+      $normalized = preg_replace('/\s/', '', $content) ?? '';
+      // Check the length before the pattern so oversized content fails fast with the size error.
+      if (strlen($normalized) > self::MAX_EMAIL_ATTACHMENTS_ENCODED_LENGTH) {
+        throw new \InvalidArgumentException(
+          'attachments decoded size exceeds ' . self::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES . ' bytes (2 MB)'
+        );
+      }
+      if (!self::isBase64($normalized)) {
         throw new \InvalidArgumentException("attachment \"{$filename}\" must be a valid base64 string");
       }
-      $totalDecodedBytes += $decodedBytes;
+      $totalDecodedBytes += intdiv(strlen(rtrim($normalized, '=')) * 3, 4);
       if ($totalDecodedBytes > self::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES) {
         throw new \InvalidArgumentException(
           'attachments decoded size exceeds ' . self::MAX_EMAIL_ATTACHMENTS_DECODED_BYTES . ' bytes (2 MB)'
         );
       }
     }
+  }
+
+  /**
+   * Standard or url-safe alphabet, padding optional, "=" only at the end. base64_decode() skips invalid
+   * characters and anything after padding, so decoding cannot be used to validate. Checked without a
+   * regex because PCRE hits its backtracking limit on attachment-sized strings.
+   */
+  private static function isBase64(string $value): bool
+  {
+    $data = rtrim($value, '=');
+    $padding = strlen($value) - strlen($data);
+    $length = strlen($data);
+    if ($length === 0 || $padding > 2 || strspn($data, self::BASE64_ALPHABET) !== $length) {
+      return false;
+    }
+    if ($length % 4 === 1) {
+      return false;
+    }
+    return $padding === 0 || ($length + $padding) % 4 === 0;
   }
 
   /**

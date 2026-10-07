@@ -8,6 +8,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use Codematic\OpenCDP\Exceptions\CDPException;
 use Codematic\OpenCDP\Exceptions\CDPEmailException;
 use Codematic\OpenCDP\Exceptions\CDPPushException;
@@ -58,11 +59,11 @@ class CDPClient
    */
   /**
    * Cloudflare (in front of the primary host) reports these when it never sent the request to the
-   * gateway: 521 refused, 522 connect timeout, 523 unreachable, 525/526 TLS failure. Generic 502/503
+   * gateway: 521 refused, 523 unreachable, 525/526 TLS failure. Generic 502/503
    * are excluded because a proxy can return them after the gateway has already queued the message,
-   * and 524 because Cloudflare connected and waited for a response.
+   * and 522/524 because Cloudflare may already have sent the request when it timed out.
    */
-  private const SEND_RETRYABLE_STATUSES = [521, 522, 523, 525, 526];
+  private const SEND_RETRYABLE_STATUSES = [521, 523, 525, 526];
 
   /**
    * cURL errors raised before the request was sent: couldn't resolve host, couldn't connect, TLS
@@ -93,15 +94,20 @@ class CDPClient
             'Content-Type' => 'application/json',
             'Accept' => 'application/json',
           ],
+          // Sends never follow redirects: a failed connection to a redirect target would look like the
+          // original host was never reached, and failover would deliver the message twice.
+          'allow_redirects' => !$sendSafe,
         ], $options);
         $response = $this->httpClient->request($method, $url, $requestOptions);
         if ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300) {
           return $response;
         }
-        $lastException = new CDPException('HTTP ' . $response->getStatusCode(), $response->getStatusCode());
-        if ($sendSafe && !in_array($response->getStatusCode(), self::SEND_RETRYABLE_STATUSES, true)) {
-          throw $lastException;
+        if ($sendSafe) {
+          // Guzzle does not throw for 3xx; raise it as a RequestException so the send methods report
+          // the status the same way they do for 4xx/5xx. A redirect is never retried.
+          throw RequestException::create(new GuzzleRequest($method, $url), $response);
         }
+        $lastException = new CDPException('HTTP ' . $response->getStatusCode(), $response->getStatusCode());
       } catch (GuzzleException $e) {
         $lastException = $e;
         if ($sendSafe && !self::isSafeToRetrySend($e)) {

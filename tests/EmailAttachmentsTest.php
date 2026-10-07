@@ -108,6 +108,11 @@ class EmailAttachmentsTest extends TestCase
       'empty content' => [['a.pdf' => ''], 'attachment "a.pdf" must be a non-empty base64 string'],
       'non-string content' => [['a.pdf' => 123], 'attachment "a.pdf" must be a non-empty base64 string'],
       'not base64' => [['a.pdf' => '!!!'], 'attachment "a.pdf" must be a valid base64 string'],
+      'invalid character in the middle' => [['a.pdf' => 'aGV$sbG8='], 'attachment "a.pdf" must be a valid base64 string'],
+      'data after padding' => [['a.pdf' => 'aGVsbG8=trailing-data'], 'attachment "a.pdf" must be a valid base64 string'],
+      'padding in the middle' => [['a.pdf' => 'aG=VsbG8'], 'attachment "a.pdf" must be a valid base64 string'],
+      'dangling single character' => [['a.pdf' => 'aGVsb'], 'attachment "a.pdf" must be a valid base64 string'],
+      'only whitespace' => [['a.pdf' => " \n\t "], 'attachment "a.pdf" must be a valid base64 string'],
     ];
   }
 
@@ -132,6 +137,22 @@ class EmailAttachmentsTest extends TestCase
       'urlsafe.bin' => '-_8=',
       'wrapped.txt' => "aGVs\nbG8=",
     ]);
+  }
+
+  public function testValidateAttachmentsRejectsOversizedContentByLength(): void
+  {
+    $this->expectException(\InvalidArgumentException::class);
+    $this->expectExceptionMessage('attachments decoded size exceeds 2097152 bytes (2 MB)');
+
+    // Built inside the test: PHPUnit copies data-provider values, which is costly for large strings.
+    Validators::validateAttachments(['huge.bin' => str_repeat('A', 16 * 1024 * 1024)]);
+  }
+
+  public function testValidateAttachmentsAcceptsExactlyTwoMegabytes(): void
+  {
+    $this->expectNotToPerformAssertions();
+
+    Validators::validateAttachments(['exact.bin' => base64_encode(str_repeat("\0", 2 * 1024 * 1024))]);
   }
 
   public function testWithAttachmentEncodesByDefaultAndKeepsOriginalUnchanged(): void
